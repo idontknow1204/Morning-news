@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trade Morning Brief</title>
+  <!-- Beautiful typography: Pretendard for global styling -->
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+
+<body>
+  <!-- Top Navigation / Header -->
+  <header class="masthead">
+    <div class="masthead-container">
+      <div class="masthead-date" id="current-date">Fetching Date...</div>
+      <h1 class="masthead-title">TRADE MORNING BRIEF</h1>
+      <div class="masthead-subtitle">Global Intelligence Dashboard</div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="dashboard">
+    <!-- Korean News Column -->
+    <section class="news-section">
+      <div class="section-header">
+        <div class="section-header-top">
+          <h2 class="section-title">Korean News</h2>
+          <span class="selection-counter" id="kr-counter">0 / 5 Selected</span>
+        </div>
+        <div class="selected-articles-list" id="kr-selected-list">
+          <!-- Selected article chips injected here -->
+        </div>
+      </div>
+      <div class="news-grid" id="korean-grid">
+        <!-- Cards injected via JS -->
+      </div>
+    </section>
+
+    <!-- Global News Column -->
+    <section class="news-section">
+      <div class="section-header">
+        <div class="section-header-top">
+          <h2 class="section-title">Global News</h2>
+          <span class="selection-counter" id="gl-counter">0 / 5 Selected</span>
+        </div>
+        <div class="selected-articles-list" id="gl-selected-list">
+          <!-- Selected article chips injected here -->
+        </div>
+      </div>
+      <div class="news-grid" id="global-grid">
+        <!-- Cards injected via JS -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Floating Action Button for PDF -->
+  <button class="fab-pdf hidden" id="generate-pdf-btn">
+    <span class="fab-icon">📄</span> <span class="fab-text">Generate Morning Brief PDF</span>
+  </button>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Article Detail Modal -->
+  <div id="article-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close-btn">&times;</button>
+      <div class="modal-source" id="modal-source"></div>
+      <h2 class="modal-title" id="modal-title"></h2>
+      <div class="modal-body" id="modal-body"></div>
+      <a href="#" target="_blank" class="modal-link-btn" id="modal-link">Read Original Article</a>
+    </div>
+  </div>
+
+  <!-- Hidden Template for PDF Rendering -->
+  <div id="pdf-root" style="display: none;">
+    <div class="pdf-container">
+      <div class="pdf-header">
+        <h1 class="pdf-title">TRADE MORNING BRIEF</h1>
+        <div class="pdf-date" id="pdf-date"></div>
+      </div>
+      <div class="pdf-content">
+        <div class="pdf-column" id="pdf-kr-col">
+          <h2 class="pdf-col-title">Korean News</h2>
+          <div class="pdf-articles" id="pdf-kr-articles"></div>
+        </div>
+        <div class="pdf-column" id="pdf-gl-col">
+          <h2 class="pdf-col-title">Global News</h2>
+          <div class="pdf-articles" id="pdf-gl-articles"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+
+</html>
