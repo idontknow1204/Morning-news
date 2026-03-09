@@ -4,9 +4,13 @@ import translate from 'translate-google';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
 
 const parser = new Parser({
     customFields: {
@@ -14,11 +18,22 @@ const parser = new Parser({
     }
 });
 
-const KOREAN_QUERY = '무역 OR 관세 OR 수출 OR 수입 OR 공급망 OR KOTRA OR 무역협회 OR "미중 무역" when:7d';
-const KOREAN_RSS_URL = `https://news.google.com/rss/search?q=${encodeURIComponent(KOREAN_QUERY)}&hl=ko&gl=KR&ceid=KR:ko`;
+const KOREAN_FEEDS = [
+    'https://www.yna.co.kr/rss/economy.xml',
+    'https://fs.jtbc.co.kr/RSS/economy.xml',
+    'http://rss.chosun.com/biz.xml',
+    'https://www.mk.co.kr/rss/30100041/',
+    'https://www.hankyung.com/feed/economy'
+];
+const GLOBAL_FEEDS = [
+    'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069',
+    'http://feeds.bbci.co.uk/news/business/rss.xml',
+    'https://www.theguardian.com/business/economics/rss',
+    'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml'
+];
 
-const GLOBAL_QUERY = 'trade OR tariff OR export OR import OR "supply chain" OR "trade war" OR "semiconductor export" when:7d';
-const GLOBAL_RSS_URL = `https://news.google.com/rss/search?q=${encodeURIComponent(GLOBAL_QUERY)}&hl=en-US&gl=US&ceid=US:en`;
+const TRADE_KEYWORDS = ['무역', '관세', '수출', '수입', '공급망', '통상', '규제', '반도체 수출', '쿼터', '보호무역', 'FTA', '경제안보', '산업', '시장', '환율', 'trade', 'tariff', 'export', 'import', 'supply chain', 'commerce', 'regulation', 'trade war', 'semiconductor export', 'economy', 'market', 'industry'];
+const BLACKLIST_KEYWORDS = ['sports', 'espn', 'nhl', 'nba', 'mlb', 'nfl', 'entertainment', 'celebrity', 'movie', 'music', '결혼', '연예', '스포츠', '야구', '축구', '농구', '골프', '드라마', 'player', 'coach', 'game score', 'highlights', 'trade deadline', 'draft pick', 'signing', 'lottery', 'sweepstakes'];
 
 function cleanContent(text, titleToRemove = "") {
     if (!text) return "";
@@ -47,50 +62,42 @@ function cleanContent(text, titleToRemove = "") {
     return clean.replace(/\s+/g, ' ').trim();
 }
 
-async function resolveUrl(googleUrl) {
+async function resolveUrl(url) {
     try {
-        const response = await fetch(googleUrl, { redirect: 'follow', signal: AbortSignal.timeout(5000) });
-        return response.url;
+        const response = await axios.get(url, {
+            maxRedirects: 5,
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36' }
+        });
+        return response.request.res.responseUrl || url;
     } catch (e) {
-        return googleUrl;
+        return url;
     }
+}
+
+function isRelevant(title, content) {
+    const text = (title + ' ' + content).toLowerCase();
+    const hasBlacklist = BLACKLIST_KEYWORDS.some(word => text.includes(word));
+    // If it's a sports trade, discard even if it has "trade"
+    if (hasBlacklist) return false;
+
+    return TRADE_KEYWORDS.some(word => text.includes(word));
 }
 
 async function fetchFullText(url, title) {
     try {
         const trueUrl = await resolveUrl(url);
-        if (trueUrl.includes('news.google.com')) return null;
-
-        const response = await fetch(trueUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36' },
-            signal: AbortSignal.timeout(10000)
+        const response = await axios.get(trueUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            timeout: 10000
         });
-        if (!response.ok) return null;
-        const html = await response.text();
 
-        const contentPatterns = [
-            /<div[^>]*(id|class)="[^"]*(article-body|article_body|story-content|news-content|post-content|view-content|art_body|articletxt|article_view|articleContent|entry-content|div_article)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-            /<article[^>]*>([\s\S]*?)<\/article>/gi,
-            /<section[^>]*class="[^"]*article[^"]*"[^>]*>([\s\S]*?)<\/section>/gi,
-            /<main[^>]*>([\s\S]*?)<\/main>/gi,
-            /<div[^>]*class="[^"]*text[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
-        ];
+        const dom = new JSDOM(response.data, { url: trueUrl });
+        const reader = new Readability(dom.window.document);
+        const article = reader.parse();
 
-        let bestBody = "";
-        for (const pattern of contentPatterns) {
-            const match = pattern.exec(html);
-            if (match && (match[3] || match[0]).length > bestBody.length) {
-                bestBody = match[3] || match[0];
-            }
-        }
-
-        if (bestBody.length > 50) {
-            const pMatches = bestBody.match(/<p[^>]*>([\s\S]*?)<\/p>/gi);
-            if (pMatches) {
-                const text = pMatches.map(p => cleanContent(p, title)).filter(t => t.length > 30).slice(0, 25).join(' ');
-                if (text.length > 100) return text;
-            }
-            return cleanContent(bestBody, title);
+        if (article && article.textContent && article.textContent.length > 500) {
+            return cleanContent(article.textContent, title);
         }
         return null;
     } catch (e) {
@@ -98,94 +105,105 @@ async function fetchFullText(url, title) {
     }
 }
 
-async function safeTranslate(text, to = 'ko') {
-    if (!text || text.length < 5) return text;
-    try {
-        const chunks = text.match(/.{1,1500}/g) || [text];
-        let translated = "";
-        for (const chunk of chunks) {
-            const t = await translate(chunk, { to });
-            translated += t + " ";
-        }
-        return translated.trim();
-    } catch (err) {
-        return text;
-    }
-}
-
 async function generateStructuredSummary(rawText) {
-    if (!rawText || rawText.length < 50) return "";
-    const sentences = rawText.split(/[.!?]\s+/).filter(s => s.trim().length > 15);
+    if (!rawText || rawText.length < 500) return null;
 
-    if (sentences.length < 2) return rawText;
+    // Split sentences using a more robust regex
+    const sentences = rawText.match(/[^.!?]+[.!?]+/g) || [];
+    const validSentences = sentences.map(s => s.trim()).filter(s => s.length > 30);
 
-    // Structure: What happened (2-3 sentences), Context/Details (3-6 sentences), Impact (1-2 sentences)
-    const what = sentences.slice(0, 3).join('. ') + '.';
-    const details = sentences.slice(3, Math.min(15, sentences.length - 2)).join('. ') + '.';
-    const impact = sentences.length > 3 ? sentences.slice(-2).join('. ') + '.' : '';
+    // If we have enough sentences, build a long summary
+    if (validSentences.length < 8) return null;
 
-    return `[사건 개요]\n${what}\n\n[주요 배경 및 상세 내용]\n${details}\n\n[시사점 및 향후 전망]\n${impact}`.trim();
+    const intro = validSentences.slice(0, 3).join(' ');
+    const body = validSentences.slice(3, Math.min(validSentences.length - 2, 15)).join(' ');
+    const conclusion = validSentences.slice(-2).join(' ');
+
+    const summary = `[사건 개요]\n${intro}\n\n[주요 배경 및 상세 내용]\n${body}\n\n[시사점 및 향후 전망]\n${conclusion}`;
+
+    // Final check for length requirement (450+ Korean characters)
+    if (summary.length < 400) return null;
+
+    return {
+        summary: summary,
+        impact: conclusion
+    };
 }
 
-async function processFeed(feedUrl, categoryPrefix) {
-    console.log(`[${categoryPrefix}] Fetching RSS...`);
+async function safeTranslate(text) {
+    if (!text) return "";
     try {
-        const feed = await parser.parseURL(feedUrl);
-        const candidates = feed.items.slice(0, 40);
-        const results = [];
-
-        for (const [index, item] of candidates.entries()) {
-            const rawTitle = item.title.replace(/ - .*$/, '').trim();
-            const sourceName = item.title.includes(' - ') ? item.title.split(' - ').pop().trim() : 'News Source';
-
-            let rawText = await fetchFullText(item.link, rawTitle);
-
-            if (!rawText || rawText.length < 100) {
-                const desc = cleanContent(item.contentSnippet || item.description || "", rawTitle);
-                const encoded = cleanContent(item['content:encoded'] || "", rawTitle);
-                rawText = encoded.length > desc.length ? encoded : desc;
-            }
-
-            // Fallback content if everything else fails
-            if (!rawText || rawText.length < 20) {
-                rawText = `${rawTitle}. 이 기사는 ${sourceName}에서 제공하는 실시간 무역 및 경제 관련 소식입니다. 현재 상세 내용을 불러오는 데 제한이 있으나, 글로벌 시장의 주요 변동성을 다루고 있습니다.`;
-            }
-
-            const summaryRaw = await generateStructuredSummary(rawText);
-            const summaryKo = await safeTranslate(summaryRaw);
-            const finalTitle = await safeTranslate(rawTitle);
-
-            if (!summaryKo || summaryKo.length < 20) continue;
-            if (results.some(r => r.title === finalTitle)) continue;
-
-            results.push({
-                id: `${categoryPrefix}-${Date.now()}-${results.length}`,
-                title: finalTitle,
-                summary: summaryKo,
-                impact: '이 사안은 글로벌 공급망과 주요 무역 지표에 영향을 미칠 수 있는 중요한 변동성을 시사합니다.',
-                source: sourceName,
-                link: item.link,
-                score: index,
-                pubDate: new Date(item.pubDate).getTime() || Date.now()
-            });
-
-            console.log(`   [${categoryPrefix}] ✓ Article ${results.length}/10: ${finalTitle.substring(0, 30)}...`);
-            if (results.length >= 10) break;
-        }
-
-        return results;
-    } catch (err) {
-        console.error(`Error processing ${categoryPrefix} feed:`, err);
-        return [];
+        // translate-google can be flaky, so we wrap it
+        const res = await translate(text, { to: 'ko' });
+        return res;
+    } catch (e) {
+        return text; // Fallback to original
     }
+}
+
+async function processFeed(categoryPrefix, rssUrls) {
+    const results = [];
+    console.log(`[${categoryPrefix}] Starting multi-feed aggregation...`);
+
+    for (const rssUrl of rssUrls) {
+        if (results.length >= 10) break;
+        console.log(`   [${categoryPrefix}] Fetching: ${rssUrl}`);
+
+        try {
+            const response = await axios.get(rssUrl, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                timeout: 10000
+            });
+            const feed = await parser.parseString(response.data);
+            const candidates = feed.items.slice(0, 50);
+
+            for (const [index, item] of candidates.entries()) {
+                const rawTitle = item.title.includes(' - ') ? item.title.split(' - ').slice(0, -1).join(' - ').trim() : item.title.trim();
+                const sourceName = item.title.includes(' - ') ? item.title.split(' - ').pop().trim() : (categoryPrefix === 'kr' ? '국내 언론' : 'International News');
+
+                if (results.some(r => r.title.includes(rawTitle.substring(0, 20)))) continue; // Basic duplicate check
+
+                if (!isRelevant(rawTitle, item.contentSnippet || "")) {
+                    continue;
+                }
+
+                let rawText = await fetchFullText(item.link, rawTitle);
+                if (!rawText) continue;
+
+                const resultObj = await generateStructuredSummary(rawText);
+                if (!resultObj) continue;
+
+                const summaryKo = await safeTranslate(resultObj.summary);
+                const impactKo = await safeTranslate(resultObj.impact);
+                const finalTitle = await safeTranslate(rawTitle);
+
+                if (!summaryKo || summaryKo.length < 400) continue; // Slightly more lenient to ensure 10 items
+
+                results.push({
+                    title: finalTitle,
+                    summary: summaryKo,
+                    impact: impactKo.length > 30 ? impactKo : '이 사안은 글로벌 공급망과 무역 지표에 실질적인 영향을 미칠 것으로 분석됩니다.',
+                    source: sourceName,
+                    link: item.link,
+                    pubDate: new Date(item.pubDate).getTime() || Date.now()
+                });
+
+                console.log(`   [${categoryPrefix}] ✓ Article ${results.length}/10: ${finalTitle.substring(0, 30)}...`);
+                if (results.length >= 10) break;
+            }
+        } catch (err) {
+            console.error(`   [${categoryPrefix}] ✗ Feed Error (${rssUrl}): ${err.message}`);
+        }
+    }
+    return results;
 }
 
 async function updateNewsData() {
-    console.log(`[${new Date().toISOString()}] Updating News (10 Items Target, Resilient Logic)...`);
+    console.log(`[${new Date().toISOString()}] Updating News (10 Items Target, Multi-Feed)...`);
     try {
         const [koreanNews, globalNews] = await Promise.all([
-            processFeed(KOREAN_RSS_URL, 'kr'),
-            processFeed(GLOBAL_RSS_URL, 'gl')
+            processFeed('kr', KOREAN_FEEDS),
+            processFeed('gl', GLOBAL_FEEDS)
         ]);
 
         fs.writeFileSync(path.join(__dirname, 'public', 'data.json'), JSON.stringify({ koreanNews, globalNews }, null, 2));
