@@ -1,5 +1,4 @@
 import './style.css';
-import html2pdf from 'html2pdf.js';
 
 // State Management
 const state = {
@@ -15,7 +14,6 @@ const elements = {
     globalGrid: document.getElementById('global-grid'),
     krCounter: document.getElementById('kr-counter'),
     glCounter: document.getElementById('gl-counter'),
-    fabPdf: document.getElementById('generate-pdf-btn'),
     // Modal Elements
     modalOverlay: document.getElementById('article-modal'),
     modalCloseBtn: document.getElementById('modal-close-btn'),
@@ -27,14 +25,7 @@ const elements = {
     // Selection chips containers
     krSelectedList: document.getElementById('kr-selected-list'),
     glSelectedList: document.getElementById('gl-selected-list'),
-
-    toastContainer: document.getElementById('toast-container'),
-
-    // PDF templates
-    pdfDate: document.getElementById('pdf-date'),
-    pdfKrArticles: document.getElementById('pdf-kr-articles'),
-    pdfGlArticles: document.getElementById('pdf-gl-articles'),
-    pdfRoot: document.getElementById('pdf-root')
+    toastContainer: document.getElementById('toast-container')
 };
 
 // Initialize App
@@ -60,8 +51,6 @@ async function init() {
         elements.globalGrid.innerHTML = errorMsg;
     }
 
-    elements.fabPdf.addEventListener('click', handleGeneratePdf);
-
     // Setup modal close events
     elements.modalCloseBtn.addEventListener('click', closeModal);
     elements.modalOverlay.addEventListener('click', (e) => {
@@ -73,20 +62,16 @@ function openModal(article) {
     elements.modalSource.textContent = article.source || 'News Source';
     elements.modalTitle.textContent = article.title;
 
-    // Convert newlines in structured summary to HTML and potentially wrap sections
     const formattedSummary = article.summary
-        .replace(/\[사건 개요\]/g, '<h4 class="modal-section-title">사건 개요</h4>')
-        .replace(/\[주요 배경 및 상세 내용\]/g, '<h4 class="modal-section-title">배경 및 상세 내용</h4>')
-        .replace(/\[시사점 및 향후 전망\]/g, '<h4 class="modal-section-title">시사점 및 향후 전망</h4>')
-        .replace(/\n\n/g, '<br><br>')
         .replace(/\n/g, '<br>');
 
     elements.modalBody.innerHTML = `
         <div class="modal-section">
+            <h4 class="modal-section-title">요약</h4>
             ${formattedSummary}
         </div>
         <div class="modal-section" style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-            <h4 class="modal-section-title" style="color: var(--accent-color);">Economic Impact / Why it matters</h4>
+            <h4 class="modal-section-title" style="color: var(--accent-color);">왜 중요한가</h4>
             <p>${article.impact}</p>
         </div>
     `;
@@ -103,7 +88,6 @@ function setDate() {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     const today = new Date().toLocaleDateString('en-US', options);
     elements.currentDate.textContent = today;
-    elements.pdfDate.textContent = today;
 }
 
 // Render article cards to the DOM
@@ -113,7 +97,7 @@ function renderArticles(articles, container, category) {
     articles.forEach(article => {
         const cardItem = document.createElement('div');
         cardItem.className = 'article-card';
-        cardItem.dataset.id = article.id;
+        cardItem.dataset.id = article.id || `${category}-${article.title}`;
         cardItem.dataset.category = category;
 
         // Checkbox container
@@ -135,6 +119,7 @@ function renderArticles(articles, container, category) {
       <div class="card-source">${article.source}</div>
       <h3 class="card-title">${article.title}</h3>
       <p class="card-summary">${article.summary}</p>
+      <p class="card-impact"><strong>왜 중요한가</strong> ${article.impact}</p>
     `;
 
         cardItem.appendChild(checkWrapper);
@@ -187,7 +172,6 @@ function handleSelection(article, category, isChecked, cardEl, checkboxEl) {
 
     updateCounters(selectedSet.size, counterEl);
     renderSelectedChips(selectedSet, category);
-    checkPdfReadiness();
 }
 
 // Render visual chips for selected articles at the top of the columns
@@ -220,7 +204,6 @@ function renderSelectedChips(selectedSet, category) {
             const counterEl = category === 'korean' ? elements.krCounter : elements.glCounter;
             updateCounters(selectedSet.size, counterEl);
             renderSelectedChips(selectedSet, category);
-            checkPdfReadiness();
         });
 
         chip.appendChild(titleSpan);
@@ -243,18 +226,6 @@ function updateCounters(size, element) {
     }
 }
 
-// Check if fab button should be visible
-function checkPdfReadiness() {
-    const isReady = state.selectedKorean.size === state.maxSelections &&
-        state.selectedGlobal.size === state.maxSelections;
-
-    if (isReady) {
-        elements.fabPdf.classList.remove('hidden');
-    } else {
-        elements.fabPdf.classList.add('hidden');
-    }
-}
-
 // Show toast notifications
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
@@ -272,71 +243,6 @@ function showToast(message, type = 'info') {
             }
         }, 300);
     }, 3000);
-}
-
-// Generate the PDF briefing
-function handleGeneratePdf() {
-    const krSelected = Array.from(state.selectedKorean);
-    const glSelected = Array.from(state.selectedGlobal);
-
-    // Populate hidden PDF templates
-    elements.pdfKrArticles.innerHTML = krSelected.map(generateHtmlForPdfArticle).join('');
-    elements.pdfGlArticles.innerHTML = glSelected.map(generateHtmlForPdfArticle).join('');
-
-    // Show template momentarily for rendering block
-    elements.pdfRoot.style.display = 'block';
-
-    // Change button text while processing
-    const originalText = elements.fabPdf.innerHTML;
-    elements.fabPdf.innerHTML = '<span class="fab-icon">⏳</span> <span class="fab-text">Generating...</span>';
-    elements.fabPdf.disabled = true;
-
-    const elementToConvert = elements.pdfRoot.querySelector('.pdf-container');
-
-    // format date for filename
-    const yyyymmdd = new Date().toISOString().split('T')[0];
-
-    const opt = {
-        margin: [15, 10, 15, 10], // Increased top & bottom margin
-        filename: `Trade_Morning_Brief_${yyyymmdd}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 800 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] } // Instructs html2pdf to respect `page-break-inside: avoid`
-    };
-
-    // Generate PDF
-    html2pdf().set(opt).from(elementToConvert).save()
-        .then(() => {
-            showToast('PDF Briering generated successfully!', 'success');
-        })
-        .catch(err => {
-            console.error(err);
-            showToast('Error generating PDF.', 'error');
-        })
-        .finally(() => {
-            // Hide template again
-            elements.pdfRoot.style.display = 'none';
-
-            // Restore button
-            elements.fabPdf.innerHTML = originalText;
-            elements.fabPdf.disabled = false;
-        });
-}
-
-// Template for a single article in the PDF
-function generateHtmlForPdfArticle(article) {
-    return `
-    <div class="pdf-article">
-      <div class="pdf-article-meta">
-        <span>${article.source}</span>
-        <a href="${article.link}" class="pdf-article-link">Read Original</a>
-      </div>
-      <h3 class="pdf-article-title">${article.title}</h3>
-      <p class="pdf-article-summary">${article.summary}</p>
-      <p class="pdf-article-impact"><strong>Why it matters:</strong> ${article.impact}</p>
-    </div>
-  `;
 }
 
 // Boot application

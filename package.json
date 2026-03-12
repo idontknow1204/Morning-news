@@ -16,7 +16,6 @@
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "axios": "^1.13.6",
-    "html2pdf.js": "^0.14.0",
     "jsdom": "^28.1.0",
     "node-cron": "^4.2.1",
     "rss-parser": "^3.13.0",
