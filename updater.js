@@ -32,17 +32,20 @@ const GLOBAL_FEEDS = [
     'https://asia.nikkei.com/rss/feed/nar',
     'https://www.economist.com/finance-and-economics/rss.xml',
     'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=15839069',
-    'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml'
+    'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml',
+    'http://feeds.bbci.co.uk/news/business/rss.xml',
+    'http://feeds.bbci.co.uk/news/world/rss.xml'
 ];
 
-const TRADE_KEYWORDS = ['관세', '통관', '수출금액', '수입금액', '수출규제', '수입규제', '미국관세', '자유무역', '보호무역', 'fta', '원산지규정', '수출지원제도', '코트라', '무역협회', '관세청', '세관', '수출바우처', '해외전시회', '글로벌무역환경', '관세장벽', '비관세장벽', '해외규격인증', '국제수지', '환율', '외환거래', '무역제재', '해외무역관', '수출기업', '해외무역', '국제무역', '글로벌벨류체인', '무역계약', '국제물류', '해상운임'];
+const TRADE_KEYWORDS = ['관세', '통관', '수출금액', '수입금액', '수출규제', '수입규제', '미국관세', '자유무역', '보호무역', 'fta', '원산지규정', '수출지원제도', '코트라', '무역협회', '관세청', '세관', '수출바우처', '해외전시회', '글로벌무역환경', '관세장벽', '비관세장벽', '해외규격인증', '국제수지', '환율', '외환거래', '무역제재', '해외무역관', '수출기업', '해외무역', '국제무역', '글로벌밸류체인', '글로벌벨류체인', '무역계약', '국제물류', '해상운임'];
 const GLOBAL_TRADE_KEYWORDS = ['tariff', 'tariffs', 'customs', 'export', 'exports', 'import', 'imports', 'trade', 'free trade', 'protectionism', 'fta', 'rules of origin', 'trade support', 'kotra', 'kita', 'customs service', 'trade barrier', 'non-tariff barrier', 'certification', 'current account', 'exchange rate', 'fx', 'foreign exchange', 'sanctions', 'trade mission', 'exporter', 'international trade', 'global value chain', 'value chain', 'shipping', 'freight', 'ocean freight', 'supply chain', 'trade agreement', 'trade policy', 'trade restriction', 'trade surplus', 'trade deficit'];
-const BLACKLIST_KEYWORDS = ['sports', 'espn', 'nhl', 'nba', 'mlb', 'nfl', 'entertainment', 'celebrity', 'movie', 'music', '결혼', '연예', '스포츠', '야구', '축구', '농구', '골프', '드라마', 'player', 'coach', 'game score', 'highlights', 'trade deadline', 'draft pick', 'signing', 'lottery', 'sweepstakes'];
+const BLACKLIST_KEYWORDS = ['sports', 'espn', 'nhl', 'nba', 'mlb', 'nfl', 'entertainment', 'celebrity', 'movie', 'music', '결혼', '연예', '스포츠', '야구', '축구', '농구', '골프', '드라마', 'player', 'coach', 'game score', 'highlights', 'trade deadline', 'draft pick', 'signing', 'lottery', 'sweepstakes', 'momentum trade', 'trading strategy', 'options trade', 'options', 'buying opportunity', 'investing club', 'stock market', 'market data', 'sell-off'];
 const KOREAN_SOURCE_ALLOWLIST = ['연합뉴스', '조선비즈', '매일경제', '한국경제', '서울경제', 'kotra', '코트라', '무역협회', '관세청', '세관', '뉴스1', '중앙일보', '동아일보', '한국무역협회'];
-const GLOBAL_SOURCE_ALLOWLIST = ['reuters', 'bloomberg', 'financial times', 'ft', 'wall street journal', 'wsj', 'nikkei', 'economist', 'cnbc'];
+const GLOBAL_SOURCE_ALLOWLIST = ['reuters', 'bloomberg', 'financial times', 'ft', 'wall street journal', 'wsj', 'nikkei', 'economist', 'cnbc', 'bbc'];
 const KOREAN_DOMAIN_ALLOWLIST = ['yna.co.kr', 'chosun.com', 'mk.co.kr', 'hankyung.com', 'sedaily.com', 'news1.kr', 'joins.com', 'donga.com', 'kotra.or.kr', 'kita.net', 'customs.go.kr'];
-const GLOBAL_DOMAIN_ALLOWLIST = ['reuters.com', 'bloomberg.com', 'ft.com', 'wsj.com', 'nikkei.com', 'economist.com', 'cnbc.com'];
+const GLOBAL_DOMAIN_ALLOWLIST = ['reuters.com', 'bloomberg.com', 'ft.com', 'wsj.com', 'nikkei.com', 'economist.com', 'cnbc.com', 'bbc.com'];
 const MAX_ARTICLES_PER_CATEGORY = 5;
+const MIN_SUMMARY_WORDS = 80;
 
 function cleanContent(text, titleToRemove = "") {
     if (!text) return "";
@@ -68,13 +71,25 @@ function cleanContent(text, titleToRemove = "") {
         /입력\s*:\s*\d{4}\.\d{2}\.\d{2}[^ ]*/g, /업데이트\s*:\s*\d{4}\.\d{2}\.\d{2}[^ ]*/g,
         /주소\s*:\s*[^.]+/g, /전화\s*:\s*[\d-]+/g, /등록일자\s*:\s*[\d.]+/g,
         /발행\/편집인\s*:\s*[^.]+/g, /연합뉴스 경제 최신기사/g, /Nikkei staff writers/gi,
-        /Reuters[A-Z\s,&.-]+/g, /[A-Z]{2,}\s+\d{4}년\s*\d{1,2}월\s*\d{1,2}일[^.]+/g
+        /Reuters[A-Z\s,&.-]+/g, /[A-Z]{2,}\s+\d{4}년\s*\d{1,2}월\s*\d{1,2}일[^.]+/g,
+        /Standard Digital[^.]*\./gi, /Premium Digital[^.]*\./gi,
+        /unlock this article[^.]*\./gi, /subscribe[^.]*access[^.]*\./gi,
+        /pay yearly[^.]*\./gi, /save \d+%[^.]*\./gi,
+        /이 기사를 잠금 해제하려면 구독하세요[^.]*\./g, /무제한 액세스를 시도하세요[^.]*\./g,
+        /1년 선불로 지불하고[^.]*\./g, /월\s*\d+[,.]?\d*[^.]*\./g,
+        /4주 동안[^.]*\./g
     ];
     boilerplate.forEach(regex => clean = clean.replace(regex, ''));
     clean = clean.replace(/^[가-힣]+\([가-힣]+\)\s*=\s*/g, '');
     clean = clean.replace(/^\d{4}[./-]\d{1,2}[./-]\d{1,2}[^가-힣A-Za-z0-9]+/g, '');
     clean = clean.replace(/[^\u0000-\u007F\u3131-\uD79D\s,.?!()"'\[\]]/g, "");
     return clean.replace(/\s+/g, ' ').trim();
+}
+
+function isPaywallNoise(text) {
+    const sample = (text || '').toLowerCase();
+    return ['standard digital', 'premium digital', 'unlock this article', 'subscribe', '무제한 액세스', '이 기사를 잠금 해제하려면', '1년 선불로 지불', 'ft weekend', '고품질 ft 저널리즘', '완전한 디지털 액세스', '체험 기간 중 언제든지 취소', '모든 구독 범위를 살펴보세요', '더 많은 혜택을 살펴보세요']
+        .some(pattern => sample.includes(pattern));
 }
 
 function normalizeSourceName(url, sourceName) {
@@ -86,6 +101,7 @@ function normalizeSourceName(url, sourceName) {
     if (lowerUrl.includes('ft.com')) return 'Financial Times';
     if (lowerUrl.includes('wsj.com') || lowerUrl.includes('a.dj.com')) return 'WSJ';
     if (lowerUrl.includes('cnbc.com')) return 'CNBC';
+    if (lowerUrl.includes('bbc.com') || lowerUrl.includes('bbci.co.uk')) return 'BBC';
     if (lowerUrl.includes('yna.co.kr')) return '연합뉴스';
     if (lowerUrl.includes('mk.co.kr')) return '매일경제';
     if (lowerUrl.includes('hankyung.com')) return '한국경제';
@@ -126,10 +142,10 @@ function keywordWeight(word) {
     return 3;
 }
 
-function isRelevant(title, content) {
+function relevanceScore(title, content) {
     const text = (title + ' ' + content).toLowerCase();
     const hasBlacklist = BLACKLIST_KEYWORDS.some(word => text.includes(word));
-    if (hasBlacklist) return false;
+    if (hasBlacklist) return -1;
 
     const koScore = TRADE_KEYWORDS
         .filter(word => text.includes(word.toLowerCase()))
@@ -138,7 +154,22 @@ function isRelevant(title, content) {
         .filter(word => text.includes(word))
         .reduce((sum, word) => sum + keywordWeight(word), 0);
 
-    return koScore + globalScore >= 2;
+    return koScore + globalScore;
+}
+
+function isRelevant(title, content, categoryPrefix = 'kr') {
+    const score = relevanceScore(title, content);
+    if (score < 0) return false;
+
+    const titleText = (title || '').toLowerCase();
+    const titleHasTradeKeyword = [...TRADE_KEYWORDS, ...GLOBAL_TRADE_KEYWORDS]
+        .some(word => titleText.includes(word.toLowerCase()));
+
+    if (categoryPrefix === 'gl') {
+        return score >= 2 || (score >= 1 && titleHasTradeKeyword);
+    }
+
+    return score >= 2;
 }
 
 function splitSentences(text) {
@@ -241,10 +272,16 @@ function pickKeySentences(rawText) {
             continue;
         }
         selected.push(item.sentence);
-        if (selected.length === 3) break;
+        if (selected.length === 8) break;
     }
 
     return selected;
+}
+
+function buildFallbackInputs(rawText) {
+    return splitSentences(rawText)
+        .filter(isUsableSummarySentence)
+        .slice(0, 10);
 }
 
 function normalizeSummaryCandidate(sentence) {
@@ -297,6 +334,12 @@ function rewriteTitleAsLead(title) {
 function buildTemplateDetail(title, rawText) {
     const text = `${title} ${rawText}`.toLowerCase();
 
+    if (text.includes('걸프만') || text.includes('석유') || text.includes('oil') || text.includes('hormuz') || text.includes('홍해')) {
+        return '핵심은 중동발 군사 충돌이 에너지 수출 경로와 국제 운송 흐름을 동시에 흔들며 원자재 가격과 물류비를 밀어 올리고 있다는 점이다.';
+    }
+    if (text.includes('trade war') || text.includes('무역전쟁')) {
+        return '핵심은 지정학 갈등이 관세와 대중 견제 논리를 다시 자극하면서 미중 통상 갈등의 강도를 높일 수 있다는 데 있다.';
+    }
     if (text.includes('수입규제') || text.includes('컨설팅 지원')) {
         return '정부는 예산과 기업당 지원 한도를 동시에 늘려 중소·중견기업의 통상 대응 부담을 낮추기로 했다.';
     }
@@ -331,6 +374,120 @@ function buildTemplateDetail(title, rawText) {
     return '';
 }
 
+function buildTemplateBackground(title, rawText) {
+    const text = `${title} ${rawText}`.toLowerCase();
+
+    if (text.includes('걸프만') || text.includes('석유') || text.includes('oil') || text.includes('hormuz') || text.includes('홍해')) {
+        return '호르무즈 해협과 홍해는 원유와 컨테이너 물동량이 겹치는 전략 요충지여서, 이 구간의 차질은 정유·화학 원가와 글로벌 선복 운영에 곧바로 반영될 수 있다.';
+    }
+    if (text.includes('trade war') || text.includes('무역전쟁')) {
+        return '미국의 대중 강경 기조와 중동 변수까지 겹치면 외교·안보 이슈가 다시 관세와 수출규제 논리로 번질 가능성이 높다는 점이 배경으로 지목된다.';
+    }
+    if (text.includes('301조')) {
+        return '배경에는 미국이 자국 산업 보호와 세수 확보를 동시에 노리며 통상 압박 수단을 다시 확대하고 있다는 판단이 깔려 있다.';
+    }
+    if (text.includes('수입규제') || text.includes('컨설팅 지원')) {
+        return '최근 미국과 주요 교역국의 반덤핑, 상계관세, 세이프가드 조치가 늘면서 중소·중견 수출기업의 대응 비용도 빠르게 커진 상황이다.';
+    }
+    if (text.includes('무관세')) {
+        return '품목 분류가 달라지면 동일 제품이라도 국가별 세율이 크게 달라질 수 있어 국제 기준 확정 자체가 수출 경쟁력과 직결된다.';
+    }
+    if (text.includes('현대차') || text.includes('기아') || text.includes('폭스바겐')) {
+        return '완성차 업계는 전기차 수요 둔화와 지역별 통상 장벽 강화가 동시에 진행되는 환경에서 생산지 재편과 차종 믹스 조정을 병행해 왔다.';
+    }
+    if (text.includes('수출') && text.includes('증가')) {
+        return '월초 수출 지표는 당월 전체 교역 흐름을 가늠하는 선행 자료로 활용되며, 주요 시장별 회복 속도를 함께 보여준다는 점에서 의미가 있다.';
+    }
+    if (text.includes('airfreight') || text.includes('항공 화물') || text.includes('도하') || text.includes('두바이')) {
+        return '중동은 아시아와 유럽을 잇는 항공 화물의 핵심 환적 거점이어서 해당 지역 충격은 반도체, 의약품, 고부가가치 소비재 운송에 곧바로 영향을 준다.';
+    }
+    if (text.includes('made in europe') || text.includes('메이드 인 유럽')) {
+        return '유럽연합이 중국발 공급 과잉에 대응해 역내 산업 육성 색채를 강화하면서, 비유럽권 제조업체에는 시장 접근 요건이 더 까다로워질 가능성이 제기된다.';
+    }
+    if (text.includes('무역 조사') || text.includes('trade probe')) {
+        return '법원 판단으로 기존 관세 조치의 근거가 흔들린 뒤에도 미국 정부가 새 조사 절차를 통해 통상 압박을 이어가려는 흐름으로 읽힌다.';
+    }
+    if (text.includes('무역 혼란')) {
+        return '미국 통상정책은 법원 판결, 행정부 대응, 의회와 대선 정치가 맞물리며 단기 이슈가 아니라 구조적 불확실성으로 번지는 모습이다.';
+    }
+    if (text.includes('관세 위협') || text.includes('tariff threat')) {
+        return '사법부 제동에도 불구하고 행정부가 새로운 관세 카드를 검토하면서 기업들은 계약, 가격, 재고 전략을 다시 조정해야 하는 상황에 놓였다.';
+    }
+
+    return '이번 보도는 통상 규제와 공급망 변화가 실제 거래 조건과 수출 전략에 어떻게 연결되는지를 보여주는 사례로 볼 수 있다.';
+}
+
+function buildTemplateImplication(title, rawText) {
+    const text = `${title} ${rawText}`.toLowerCase();
+
+    if (text.includes('걸프만') || text.includes('석유') || text.includes('oil') || text.includes('hormuz') || text.includes('홍해')) {
+        return '에너지 의존도가 높거나 장거리 해상 운송 비중이 큰 수출기업은 유가, 운임, 보험료 상승을 함께 반영해 조달과 출하 계획을 재점검할 필요가 있다.';
+    }
+    if (text.includes('trade war') || text.includes('무역전쟁')) {
+        return '수출기업 입장에서는 미중 관계 악화가 추가 관세, 공급망 재편, 대체시장 확보 이슈로 연결될 수 있어 지역별 영업 전략을 다시 짜야 한다.';
+    }
+    if (text.includes('관세') || text.includes('tariff')) {
+        return '실무적으로는 수출 단가 산정, 원산지 검토, 미국향 투자와 생산 배분 전략을 다시 점검해야 한다는 뜻으로 해석된다.';
+    }
+    if (text.includes('수입규제') || text.includes('규제')) {
+        return '기업 입장에서는 조사 대응 자료, 법률 자문, 원가 구조 정비를 선제적으로 준비해야 규제 확대에 따른 손실을 줄일 수 있다.';
+    }
+    if (text.includes('수출') || text.includes('import') || text.includes('export')) {
+        return '수출기업과 물류 담당자는 시장별 수요 변화와 통관 여건을 함께 확인하면서 계약 일정과 출하 계획을 보수적으로 조정할 필요가 있다.';
+    }
+    if (text.includes('물류') || text.includes('shipping') || text.includes('freight')) {
+        return '공급망 측면에서는 대체 운송 경로 확보와 재고 완충 전략이 중요해지며, 항공·해상 운임 변동성 관리도 핵심 과제로 떠오른다.';
+    }
+    if (text.includes('환율') || text.includes('외환') || text.includes('fx')) {
+        return '환율 민감도가 높은 업종은 결제 조건과 환헤지 전략을 조정하지 않으면 마진 변동성이 커질 수 있다.';
+    }
+
+    return '결국 이번 이슈는 통상 정책 변화가 계약 조건, 시장 접근성, 공급망 운영에 어떤 부담을 주는지 점검해야 한다는 신호로 읽힌다.';
+}
+
+function buildNumericSentence(sentences) {
+    const numeric = sentences.find(sentence => /\d+(?:[.,]\d+)?%|\d+(?:[.,]\d+)?억|\d+(?:[.,]\d+)?조|\d+(?:[.,]\d+)?달러/.test(sentence));
+    if (!numeric) return '';
+
+    const cleaned = normalizeSummaryCandidate(numeric)
+        .replace(/했다\.$/, '한 것으로 파악된다.')
+        .replace(/증가했다\.$/, '증가한 것으로 집계됐다.')
+        .replace(/감소했다\.$/, '감소한 것으로 집계됐다.')
+        .replace(/확정됐다\.$/, '확정된 상태다.');
+
+    if (!cleaned) return '';
+    return `구체적으로 ${cleaned}`;
+}
+
+function buildContextSentence(sentences, usedSentences) {
+    const candidate = sentences.find(sentence => {
+        const normalized = normalizeSummaryCandidate(sentence);
+        if (!normalized) return false;
+        if (usedSentences.has(normalized)) return false;
+        return normalized.length >= 45;
+    });
+
+    if (!candidate) return '';
+
+    const normalized = normalizeSummaryCandidate(candidate)
+        .replace(/했다\.$/, '한 상황이다.')
+        .replace(/있다\.$/, '있는 상황이다.')
+        .replace(/예상된다\.$/, '는 분석이 나온다.');
+
+    return normalized ? `배경으로는 ${normalized.charAt(0).toLowerCase() === normalized.charAt(0) ? normalized : normalized}` : '';
+}
+
+function countWords(text) {
+    return (text || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+function splitParagraphToSentences(text) {
+    return (text || '')
+        .split(/(?<=\.)\s+/)
+        .map(sentence => enforceSentenceSpacing(sentence).trim())
+        .filter(Boolean);
+}
+
 function classifySummarySentence(sentence, title) {
     const text = `${title} ${sentence}`.toLowerCase();
     if (/\d+(?:[.,]\d+)?%|\d+(?:[.,]\d+)?억|\d+(?:[.,]\d+)?조|\d+(?:[.,]\d+)?달러/.test(sentence)) return 'detail';
@@ -341,41 +498,48 @@ function classifySummarySentence(sentence, title) {
     return 'detail';
 }
 
-function buildSummaryFromCandidates(title, translatedTitle, sentences) {
-    const buckets = { lead: [], detail: [], context: [] };
-    const titleLead = rewriteTitleAsLead(translatedTitle || title);
-    const templateDetail = buildTemplateDetail(translatedTitle || title, sentences.join(' '));
+function buildSummaryFromCandidates(title, translatedTitle, sentences, translatedExcerpt = '') {
+    const normalizedSentences = [];
+    const seen = new Set();
 
-    for (const raw of sentences) {
+    for (const raw of [...sentences, ...splitParagraphToSentences(translatedExcerpt)]) {
         const sentence = normalizeSummaryCandidate(raw);
-        if (!sentence || sentence.length < 20) continue;
-        if (!isUsableSummarySentence(sentence)) continue;
-        const key = sentence.replace(/\s+/g, '').slice(0, 36);
-        const exists = Object.values(buckets).flat().some(item => item.key === key);
-        if (exists) continue;
-        const type = classifySummarySentence(sentence, title);
-        buckets[type].push({ text: sentence, key });
+        if (!sentence || !isUsableSummarySentence(sentence)) continue;
+        const key = sentence.replace(/\s+/g, '').slice(0, 42);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        normalizedSentences.push(sentence);
     }
 
-    const ordered = [
-        titleLead,
-        templateDetail,
-        ...buckets.lead.map(item => item.text),
-        ...buckets.detail.map(item => item.text),
-        ...buckets.context.map(item => item.text)
-    ];
+    const titleLead = rewriteTitleAsLead(translatedTitle || title);
+    const detail = buildTemplateDetail(translatedTitle || title, normalizedSentences.join(' '));
+    const background = buildTemplateBackground(translatedTitle || title, normalizedSentences.join(' '));
+    const implication = buildTemplateImplication(translatedTitle || title, normalizedSentences.join(' '));
+    const numeric = buildNumericSentence(normalizedSentences);
+    const usedSentences = new Set([titleLead, detail, background, implication, numeric].filter(Boolean));
+    const context = buildContextSentence(normalizedSentences, usedSentences);
 
-    const selected = [];
-    for (const sentence of ordered) {
-        if (!sentence) continue;
-        if (selected.some(existing => existing.replace(/\s+/g, '').slice(0, 28) === sentence.replace(/\s+/g, '').slice(0, 28))) continue;
-        if (selected.length >= 2) break;
-        selected.push(sentence);
+    const summaryParts = [titleLead, detail, background, numeric, context, implication]
+        .filter(Boolean)
+        .filter((sentence, index, array) => array.findIndex(item => item.replace(/\s+/g, '').slice(0, 32) === sentence.replace(/\s+/g, '').slice(0, 32)) === index);
+
+    let summary = enforceSentenceSpacing(summaryParts.join(' '));
+
+    if (countWords(summary) < MIN_SUMMARY_WORDS) {
+        const extras = normalizedSentences
+            .map(sentence => normalizeSummaryCandidate(sentence))
+            .filter(Boolean)
+            .filter(sentence => !summaryParts.some(existing => existing.replace(/\s+/g, '').slice(0, 32) === sentence.replace(/\s+/g, '').slice(0, 32)))
+            .slice(0, 5)
+            .map(sentence => sentence
+                .replace(/했다\.$/, '한 것으로 전해진다.')
+                .replace(/있다\.$/, '있는 상태다.')
+            );
+
+        summary = enforceSentenceSpacing([summary, ...extras].join(' '));
     }
 
-    if (selected.length < 2) return null;
-
-    return enforceSentenceSpacing(selected.join(' '));
+    return countWords(summary) >= MIN_SUMMARY_WORDS ? summary : null;
 }
 
 function buildImportance(summary, title) {
@@ -410,7 +574,10 @@ async function fetchFullText(url, title) {
         const article = reader.parse();
 
         if (article && article.textContent && article.textContent.length > 250) {
-            return cleanContent(article.textContent, title);
+            const cleaned = cleanContent(article.textContent, title);
+            if (cleaned && !isPaywallNoise(cleaned)) {
+                return cleaned;
+            }
         }
         return null;
     } catch (e) {
@@ -433,16 +600,22 @@ async function generateStructuredSummary(rawText, title) {
     if ((!rawText || rawText.length < 20) && !title) return null;
 
     const keySentences = pickKeySentences(rawText);
-    const summaryInputs = keySentences.length >= 2
-        ? keySentences.slice(0, 3)
-        : [title, rawText].filter(Boolean);
+    const fallbackInputs = buildFallbackInputs(rawText);
+    const summaryInputs = keySentences.length >= 3
+        ? keySentences.slice(0, 8)
+        : fallbackInputs.length >= 3
+            ? fallbackInputs.slice(0, 8)
+            : [title, rawText.slice(0, 2000)].filter(Boolean);
 
-    const [translatedTitle, ...translated] = await Promise.all([
+    const [translatedTitle, translatedExcerpt, ...translated] = await Promise.all([
         safeTranslate(title),
+        safeTranslate(rawText.slice(0, 2200)),
         ...summaryInputs.map(sentence => safeTranslate(sentence))
     ]);
-    const summary = buildSummaryFromCandidates(title, translatedTitle, translated);
-    if (!summary || summary.length < 40) return null;
+    const sanitizedExcerpt = isPaywallNoise(translatedExcerpt) ? '' : translatedExcerpt;
+    const sanitizedSentences = translated.filter(sentence => !isPaywallNoise(sentence));
+    const summary = buildSummaryFromCandidates(title, translatedTitle, sanitizedSentences, sanitizedExcerpt);
+    if (!summary || countWords(summary) < MIN_SUMMARY_WORDS) return null;
     const impact = buildImportance(summary, title);
 
     return { summary, impact };
@@ -487,7 +660,7 @@ async function processFeed(categoryPrefix, rssUrls) {
                 if (seenTitles.has(normalizedTitle)) continue;
                 if (!isAllowedSource(categoryPrefix, sourceName, item.link)) continue;
 
-                if (!isRelevant(rawTitle, item.contentSnippet || "")) {
+                if (!isRelevant(rawTitle, item.contentSnippet || "", categoryPrefix)) {
                     continue;
                 }
 
@@ -497,7 +670,7 @@ async function processFeed(categoryPrefix, rssUrls) {
                 }
                 if (!rawText) continue;
 
-                if (!isRelevant(rawTitle, rawText)) continue;
+                if (!isRelevant(rawTitle, rawText, categoryPrefix)) continue;
 
                 const resultObj = await generateStructuredSummary(rawText, rawTitle);
                 if (!resultObj) continue;
