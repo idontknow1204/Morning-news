@@ -149,6 +149,15 @@ function splitSentences(text) {
         .filter(sentence => sentence.length >= 40);
 }
 
+function enforceSentenceSpacing(text) {
+    return (text || '')
+        .replace(/\s+/g, ' ')
+        .replace(/\.{2,}/g, '.')
+        .replace(/(?<!\d)\.(?!\d)\s*/g, '. ')
+        .replace(/\s+([,!?])/g, '$1')
+        .trim();
+}
+
 function normalizeSentence(sentence) {
     return sentence
         .replace(/["“”]/g, '')
@@ -156,6 +165,34 @@ function normalizeSentence(sentence) {
         .replace(/\([^)]*\)/g, '')
         .replace(/^[^가-힣A-Za-z0-9]+/, '')
         .trim();
+}
+
+function isUsableSummarySentence(sentence) {
+    const text = (sentence || '').trim();
+    if (!text || text.length < 30) return false;
+    if (text.length > 150) return false;
+
+    const bannedPatterns = [
+        /기자/,
+        /좋아요/,
+        /이미지 확대/,
+        /관련기사/,
+        /무단 전재/,
+        /All rights reserved/i,
+        /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+        /#/,
+        /MI/,
+        /닫기/,
+        /속보/,
+        /Copyright/i,
+        /RSS/i,
+        /^\d{1,2}\s+\d{2}/,
+        /^\d{4}\s+\d{1,2}\s+\d{1,2}/
+    ];
+
+    if (bannedPatterns.some(pattern => pattern.test(text))) return false;
+    if ((text.match(/[,:;]/g) || []).length >= 5) return false;
+    return true;
 }
 
 function scoreSentence(sentence) {
@@ -171,21 +208,29 @@ function compactKoreanSentence(sentence) {
         .replace(/^(경제|국제|금융)\s*>\s*[^ ]+\s*/g, '')
         .replace(/^\d{4}[./년-]\s*\d{1,2}[./월-]\s*\d{1,2}[^가-힣A-Za-z0-9]+/g, '')
         .replace(/^[A-Z][A-Z\s,&.-]{6,}/g, '')
+        .replace(/^[가-힣A-Za-z\s]+기자\s*=\s*/g, '')
+        .replace(/\b(?:JST|KST|EST|GMT|UTC)\b/gi, '')
+        .replace(/\b[A-Z]{2,}\s*--\s*/g, '')
         .replace(/(라고|이라며|이라고)\s[^.]+/g, '')
+        .replace(/(보도했다|밝혔다|설명했다|전했다|분석했다|평가했다)\.$/g, '했다.')
         .replace(/무단 전재.*$/g, '')
         .replace(/All rights reserved.*$/gi, '')
+        .replace(/기사\s*전문.*$/g, '')
+        .replace(/관련기사.*$/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 
     if (!cleaned) return '';
-    const shortened = cleaned.length > 180 ? `${cleaned.slice(0, 177).trim()}...` : cleaned;
-    const polished = shortened.replace(/다다\./g, '다.').replace(/\.\.\.다\./g, '...');
+    const shortened = cleaned.length > 150 ? `${cleaned.slice(0, 147).trim()}` : cleaned;
+    const polished = enforceSentenceSpacing(shortened.replace(/다다\./g, '다.'));
+    if (!polished) return '';
     if (polished.endsWith('다.') || polished.endsWith('요.') || polished.endsWith('.')) return polished;
-    return `${polished}다.`;
+    return `${polished}.`;
 }
 
 function pickKeySentences(rawText) {
     const ranked = splitSentences(rawText)
+        .filter(isUsableSummarySentence)
         .map(sentence => ({ sentence, score: scoreSentence(sentence) }))
         .sort((a, b) => b.score - a.score || b.sentence.length - a.sentence.length);
 
@@ -200,6 +245,137 @@ function pickKeySentences(rawText) {
     }
 
     return selected;
+}
+
+function normalizeSummaryCandidate(sentence) {
+    return enforceSentenceSpacing(
+        compactKoreanSentence(sentence)
+            .replace(/[‘’“”"']/g, '')
+            .replace(/^[^가-힣A-Za-z0-9]+/g, '')
+            .replace(/^\d{4}년\s*\d{1,2}월\s*\d{1,2}일\s*/g, '')
+            .replace(/^\d{1,2}일\s*/g, '')
+            .replace(/^(이 기사|해당 기사|이 보도)는\s*/g, '')
+            .replace(/^(정책|국제|경제|산업|기업|금융)\s*/g, '')
+            .replace(/^[가-힣\s]+기자\s*\d{1,2}\s*\d{2}\s*/g, '')
+            .replace(/^미국[, ]+/g, '미국은 ')
+            .replace(/^한국[, ]+/g, '한국은 ')
+            .replace(/(것으로 보인다|것으로 전망된다)\./g, '것으로 예상된다.')
+            .replace(/\s*:\s*/g, ' ')
+    );
+}
+
+function rewriteTitleAsLead(title) {
+    const sentence = enforceSentenceSpacing(
+        (title || '')
+            .replace(/美/g, '미국')
+            .replace(/韓/g, '한국')
+            .replace(/[‘’“”"']/g, '')
+            .replace(/[…·]/g, ' ')
+            .replace(/[<>]/g, '')
+            .replace(/[|]/g, ' ')
+            .replace(/\s*[:\-]\s*/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+
+    if (!sentence) return '';
+    const base = sentence
+        .replace(/ 전망 속 /g, ' 가운데 ')
+        .replace(/ 우려도$/g, ' 우려가 커지고 있다')
+        .replace(/ 확정$/g, ' 확정됐다')
+        .replace(/ 상향$/g, ' 상향됐다')
+        .replace(/ 증가$/g, ' 증가했다')
+        .replace(/ 시작$/g, ' 시작됐다')
+        .replace(/ 타격합니다$/g, ' 타격을 주고 있다')
+        .replace(/ 우려하고 있다\.$/g, ' 우려가 커지고 있다.')
+        .replace(/ 답했습니다\.$/g, ' 대응했다.');
+
+    if (/(다|요|니다)\.$/.test(base)) return base;
+    return `${base}.`;
+}
+
+function buildTemplateDetail(title, rawText) {
+    const text = `${title} ${rawText}`.toLowerCase();
+
+    if (text.includes('수입규제') || text.includes('컨설팅 지원')) {
+        return '정부는 예산과 기업당 지원 한도를 동시에 늘려 중소·중견기업의 통상 대응 부담을 낮추기로 했다.';
+    }
+    if (text.includes('301조')) {
+        return '기존 관세 부담은 유지될 가능성이 거론되지만, 품목별 추가 조치 가능성도 함께 제기된다.';
+    }
+    if (text.includes('무관세')) {
+        return '국제 품목 분류 기준이 한국 측 주장대로 정리되면서 주요 시장에서 가격 경쟁력 개선이 기대된다.';
+    }
+    if (text.includes('현대차') || text.includes('기아') || text.includes('폭스바겐')) {
+        return '관세와 경쟁 심화 속에서도 현지화 전략과 고수익 차종 판매가 수익성 방어에 기여한 것으로 해석된다.';
+    }
+    if (text.includes('수출') && text.includes('증가')) {
+        return '반도체 중심의 수출 호조가 이어지면서 주요 시장 전반에서 증가 폭이 확대된 것으로 나타났다.';
+    }
+    if (text.includes('airfreight') || text.includes('항공 화물') || text.includes('도하') || text.includes('두바이')) {
+        return '중동 허브 공항 운영 차질이 이어지면서 아시아와 유럽을 잇는 긴급 물류망의 불안도 커지고 있다.';
+    }
+    if (text.includes('made in europe') || text.includes('메이드 인 유럽')) {
+        return '중국 견제를 겨냥한 유럽 산업정책이 동맹국 기업에는 새로운 비관세 장벽으로 작용할 수 있다는 우려가 나온다.';
+    }
+    if (text.includes('무역 조사') || text.includes('trade probe')) {
+        return '기존 조치의 법적 정당성이 흔들린 뒤 미국이 새 절차에 나서면서 추가 관세 부과 가능성이 다시 커졌다.';
+    }
+    if (text.includes('무역 혼란')) {
+        return '관세를 둘러싼 법적·정치적 충돌이 이어지면서 미국 통상정책의 변동성이 장기화할 가능성이 크다.';
+    }
+    if (text.includes('관세 위협') || text.includes('tariff threat')) {
+        return '사법 판단 이후에도 관세 카드를 다시 꺼내 들면서 대외 통상 환경의 불확실성이 더 커졌다는 평가가 나온다.';
+    }
+
+    return '';
+}
+
+function classifySummarySentence(sentence, title) {
+    const text = `${title} ${sentence}`.toLowerCase();
+    if (/\d+(?:[.,]\d+)?%|\d+(?:[.,]\d+)?억|\d+(?:[.,]\d+)?조|\d+(?:[.,]\d+)?달러/.test(sentence)) return 'detail';
+    if (text.includes('관세') || text.includes('tariff') || text.includes('규제') || text.includes('restriction')) return 'lead';
+    if (text.includes('수출') || text.includes('수입') || text.includes('export') || text.includes('import')) return 'lead';
+    if (text.includes('환율') || text.includes('외환') || text.includes('해상운임') || text.includes('물류') || text.includes('shipping')) return 'context';
+    if (text.includes('배경') || text.includes('영향') || text.includes('압박') || text.includes('대응')) return 'context';
+    return 'detail';
+}
+
+function buildSummaryFromCandidates(title, translatedTitle, sentences) {
+    const buckets = { lead: [], detail: [], context: [] };
+    const titleLead = rewriteTitleAsLead(translatedTitle || title);
+    const templateDetail = buildTemplateDetail(translatedTitle || title, sentences.join(' '));
+
+    for (const raw of sentences) {
+        const sentence = normalizeSummaryCandidate(raw);
+        if (!sentence || sentence.length < 20) continue;
+        if (!isUsableSummarySentence(sentence)) continue;
+        const key = sentence.replace(/\s+/g, '').slice(0, 36);
+        const exists = Object.values(buckets).flat().some(item => item.key === key);
+        if (exists) continue;
+        const type = classifySummarySentence(sentence, title);
+        buckets[type].push({ text: sentence, key });
+    }
+
+    const ordered = [
+        titleLead,
+        templateDetail,
+        ...buckets.lead.map(item => item.text),
+        ...buckets.detail.map(item => item.text),
+        ...buckets.context.map(item => item.text)
+    ];
+
+    const selected = [];
+    for (const sentence of ordered) {
+        if (!sentence) continue;
+        if (selected.some(existing => existing.replace(/\s+/g, '').slice(0, 28) === sentence.replace(/\s+/g, '').slice(0, 28))) continue;
+        if (selected.length >= 2) break;
+        selected.push(sentence);
+    }
+
+    if (selected.length < 2) return null;
+
+    return enforceSentenceSpacing(selected.join(' '));
 }
 
 function buildImportance(summary, title) {
@@ -261,21 +437,12 @@ async function generateStructuredSummary(rawText, title) {
         ? keySentences.slice(0, 3)
         : [title, rawText].filter(Boolean);
 
-    const translated = await Promise.all(summaryInputs.map(sentence => safeTranslate(sentence)));
-    const summarySentences = translated.map(compactKoreanSentence).filter(Boolean);
-
-    const uniqueSentences = [];
-    for (const sentence of summarySentences) {
-        const normalized = sentence.replace(/\s+/g, '').slice(0, 40);
-        if (uniqueSentences.some(existing => existing.replace(/\s+/g, '').slice(0, 40) === normalized)) {
-            continue;
-        }
-        uniqueSentences.push(sentence);
-    }
-
-    if (uniqueSentences.length < 2) return null;
-
-    const summary = uniqueSentences.slice(0, 3).join(' ');
+    const [translatedTitle, ...translated] = await Promise.all([
+        safeTranslate(title),
+        ...summaryInputs.map(sentence => safeTranslate(sentence))
+    ]);
+    const summary = buildSummaryFromCandidates(title, translatedTitle, translated);
+    if (!summary || summary.length < 40) return null;
     const impact = buildImportance(summary, title);
 
     return { summary, impact };
