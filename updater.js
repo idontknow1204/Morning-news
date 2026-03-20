@@ -1,5 +1,4 @@
 import Parser from 'rss-parser';
-import cron from 'node-cron';
 import translate from 'translate-google';
 import fs from 'fs';
 import path from 'path';
@@ -705,23 +704,18 @@ async function processFeed(categoryPrefix, rssUrls) {
 
 async function updateNewsData() {
     console.log(`[${new Date().toISOString()}] Updating News (${MAX_ARTICLES_PER_CATEGORY} Items Per Category Target)...`);
-    try {
-        const [koreanNews, globalNews] = await Promise.all([
-            processFeed('kr', KOREAN_FEEDS),
-            processFeed('gl', GLOBAL_FEEDS)
-        ]);
+    const [koreanNews, globalNews] = await Promise.all([
+        processFeed('kr', KOREAN_FEEDS),
+        processFeed('gl', GLOBAL_FEEDS)
+    ]);
 
-        fs.writeFileSync(path.join(__dirname, 'public', 'data.json'), JSON.stringify({ koreanNews, globalNews }, null, 2));
-        console.log(`DONE: KR=${koreanNews.length}, GL=${globalNews.length}`);
-    } catch (error) {
+    fs.writeFileSync(path.join(__dirname, 'public', 'data.json'), JSON.stringify({ koreanNews, globalNews }, null, 2));
+    console.log(`DONE: KR=${koreanNews.length}, GL=${globalNews.length}`);
+}
+
+updateNewsData()
+    .then(() => process.exit(0))
+    .catch(error => {
         console.error('UpdateNewsData error:', error);
-    }
-}
-
-const runOnce = process.argv.includes('--run-once');
-if (runOnce) {
-    updateNewsData().then(() => process.exit(0));
-} else {
-    updateNewsData();
-    cron.schedule('0 6 * * *', updateNewsData);
-}
+        process.exit(1);
+    });

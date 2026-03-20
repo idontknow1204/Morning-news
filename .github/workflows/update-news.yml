@@ -5,6 +5,9 @@ on:
     - cron: '0 21 * * *' # 06:00 KST
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -22,6 +25,25 @@ jobs:
         
       - name: Update news data
         run: npm run update-news
+
+      - name: Validate generated news data
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+
+          const dataPath = path.join(process.cwd(), 'public', 'data.json');
+          const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+          const koreanCount = Array.isArray(data.koreanNews) ? data.koreanNews.length : 0;
+          const globalCount = Array.isArray(data.globalNews) ? data.globalNews.length : 0;
+
+          console.log(`Validation counts -> Korean: ${koreanCount}, Global: ${globalCount}`);
+
+          if (koreanCount === 0 || globalCount === 0) {
+            console.error('Validation failed: koreanNews or globalNews is empty.');
+            process.exit(1);
+          }
+          EOF
         
       - name: Commit and push changes
         run: |
